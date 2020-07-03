@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+
+	<sub-flow name="filterBinary" doc:id="018b3d19-1ad2-4afa-b557-983a08bd121b" >
+		<choice doc:name="Choice" doc:id="0b42dacc-1b08-46ec-99d9-d803494b0089" >
+			<when expression='#[typeOf(payload) as String != "Binary"]' >
+				<logger level="INFO" doc:name="Logger" doc:id="6148eccf-1276-40e2-b88f-766c62a80c33" message="Payload binary check complete"/>
+			</when>
+			<otherwise >
+				<set-payload value="#[[]]" doc:name="Set Payload" doc:id="9ea464be-a5a4-49c6-ae70-cc06e89dba39" />
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<error-handler name="standardizeError_Handler" doc:id="ff52bdee-37b8-4a6e-8f52-3d18611d5af1" >
+		<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="4ba1d01a-f42b-4a29-bf2d-fccb6c13f3fa" type="HTTP:BAD_REQUEST">
+				<logger level="INFO" doc:name="Logger" doc:id="339c7532-6979-44e2-8b42-56dff6fad24a" message="bad request" />
+				<set-payload value="#[[]]" doc:name="Set Payload" doc:id="bea3a73c-e226-465f-8241-9d1d820c28e8" />
+			</on-error-continue>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="a79e3883-7b8a-476b-8c45-885be36b4cc5" type="EXPRESSION">
+				<logger level="INFO" doc:name="Logger" doc:id="7a3afa58-8aae-4e6f-a7dd-9901d3a41765" message="dataweave error" />
+			</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="993fc01c-e455-4187-8694-0ce6e7d46450" type="WSC:BAD_REQUEST">
+			<logger level="INFO" doc:name="Logger" doc:id="0f20fe30-624d-4c88-957a-4bf269196eff" message="#[error.errorType]"/>
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="f89c169f-ff2d-47dc-a27e-fc303f7438a5" type="DELTA:BAD_WSC_REQUEST">
+			<logger level="INFO" doc:name="Logger" doc:id="b3237201-fa0f-4ba9-ba9f-feb9d6305f98" message="#[error.errorType]"/>
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d7bc0145-5d0f-4334-9956-5a42137cdbc5" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="14e472f6-f469-40b4-95f5-64aa0a2afab5" message="error.errorType" />
+			</on-error-propagate>
+	</error-handler>
+	<flow name="getAmerican" doc:id="9f9e6fef-5d73-429b-bb7c-9f32ffba48bc" >
+		<http:request method="GET" doc:name="Get American Flights" doc:id="9e23c7a9-e43b-43a4-b839-46a120c9a9ab" config-ref="HTTP_Request_American" path="${american.path}">
+			<http:query-params ><![CDATA[#[output applicaton/java
+---
+{
+	destination : vars.destinationCode
+}]]]></http:query-params>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="f449cf5f-0b79-4678-b225-00aff8989023" message='#["American payload type: " ++ typeOf(payload)]'/>
+		<choice doc:name="Choice" doc:id="5d0338d4-c21b-4ccf-b245-33cf633d103a" >
+			<when expression="#[not isEmpty(payload)]" >
+				<ee:transform doc:name="Transform Message" doc:id="283868c6-1fe6-4552-a1bc-39c55328684b">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload as Array map ((flight,index) ->
+	{
+		airline: "American",
+		code: upper (flight.code),
+		price: flight.price,
+		departureDate: flight.departureDate as DateTime as String {format: "YYYY/MM/dd"},
+		fromAirport: flight.origin,
+		toAirport: flight.destination,
+		plane: flight.plane['type'],
+		emptySeats: flight.emptySeats,
+		totalSeats: flight.plane.totalSeats
+	}
+)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<otherwise >
+				<set-payload value='#[[]]' doc:name="Set Payload" doc:id="2ae1468a-ec95-4383-a89e-22957aa09e5d"/>
+			</otherwise>
+		</choice>
+		<error-handler ref="standardizeError_Handler" />
+	</flow>
+	<flow name="getUnited" doc:id="bb5b84aa-df6b-4e13-be74-375bce1db7df" >
+		<http:request method="GET" doc:name="Get United Flights" doc:id="ff859208-c4cf-40b6-a274-08a7d3fc8685" config-ref="HTTP_Request_United" path="${united.path}/{destinationCode}">
+			<http:uri-params ><![CDATA[#[output applicaton/java
+---
+{
+	destinationCode : vars.destinationCode
+}]]]></http:uri-params>
+		</http:request>
+		<flow-ref doc:name="filterBinary" doc:id="795aeede-3965-4696-9265-138a485e6e33" name="filterBinary"/>
+		<logger level="INFO" doc:name="Logger" doc:id="494d913f-1d88-4405-bdf3-6ad676559d18" message='#["United payload type: " ++ typeOf(payload)]'/>
+		<choice doc:name="Choice" doc:id="6aa60fb1-498b-40c3-a7e8-f3f20fb4c3b4" >
+			<when expression="#[not isEmpty(payload.flights default [])]" >
+				<ee:transform doc:name="Transform Message" doc:id="3a9cffbf-4240-480c-89d8-d9a81f62a919">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+
+(payload as Object).flights map((flight,index) ->
+	{
+		airline: flight.airlineName,
+		code: upper(flight.code),
+		price: flight.price,
+		departureDate: flight.departureDate,
+		fromAirport: flight.origin,
+		toAirport: flight.destination,
+		plane: flight.planeType,
+		emptySeats: flight.emptySeats,
+		totalSeats: 300
+	}
+)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<otherwise >
+				<set-payload value="#[[]]" doc:name="Set Payload" doc:id="cd5e240b-e5a6-46e8-9cc5-a0bea089e590" />
+			</otherwise>
+		</choice>
+		<error-handler ref="standardizeError_Handler" />
+	</flow>
+	<flow name="getDelta" doc:id="6c6e6047-3562-4b5e-8258-57162bb3c4d4" >
+		<ee:transform doc:name="Build SOAP request" doc:id="7a7a8d53-a6e8-4062-8e3b-ace9b0e765ef" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+ns ns0 http://soap.training.mulesoft.com/
+---
+{
+	ns0#findFlight: {
+		destination: vars.destinationCode
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<try doc:name="Try" doc:id="a71d8240-bf39-4313-ac40-0fbae0442889" >
+			<wsc:consume doc:name="Consume" doc:id="7ea12163-be51-4a88-b246-878b873fd4c6" config-ref="Web_Service_Delta" operation="findFlights" >
+				<error-mapping sourceType="WSC:BAD_REQUEST" targetType="DELTA:BAD_WSC_REQUEST" />
+			</wsc:consume>
+			<logger level="INFO" doc:name="Logger" doc:id="a928a159-4d3f-4a5c-9989-e6c14d39c00e" message='#["Delta payload type: " ++ typeOf(payload.body)]' />
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="ac9cd14f-d94e-4756-a541-aa640816f04a" type="WSC:INVALID_WSDL">
+					<logger level="INFO" doc:name="Logger" doc:id="27082f5e-458d-476b-9259-1fb68f1ced42" message="#[error.errorType]"/>
+				</on-error-propagate>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="9c049f53-8b6d-47b7-bc05-d3d517aa3a85" type="WSC:BAD_REQUEST, WSC:BAD_RESPONSE, WSC:RETRY_EXHAUSTED, WSC:TIMEOUT">
+					<logger level="INFO" doc:name="Logger" doc:id="6b4f1fc3-1722-4dfd-9d78-c62030c243df" message="#[error.errorType]"/>
+					<set-payload value="#[[]]" doc:name="Set Payload" doc:id="cff6b139-868e-4831-9ba9-cc877649b45e" />
+				</on-error-continue>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="495418d2-9900-4297-82f3-6175e4d2a18a" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="0a6a607e-eb87-4e77-9205-08062018fb3f" message="#[error.errorType]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="22d2247f-206e-4cfb-82a4-a7a3aade1d6d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+(payload.body.findFlightResponse.*return as Array default []) map ( (flight,index) ->
+	{
+		airline: flight.airlineName,
+		code: upper(flight.code),
+		price: flight.price as Number,
+		departureDate: flight.departureDate,
+		fromAirport: flight.origin,
+		toAirport: flight.destination,
+		plane: flight.planeType replace /Boing/ with "Boeing",
+		emptySeats: flight.emptySeats as Number,
+		totalSeats: 300		
+	}	
+)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler ref="standardizeError_Handler" />
+	</flow>
+</mule>
